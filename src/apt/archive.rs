@@ -3,13 +3,26 @@ use ar::{Archive as Ar, Entry as ArEntry};
 use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
 use lzma_rs::xz_decompress;
-use std::io::{BufRead, BufReader, Cursor, Read};
+use std::{
+	fmt,
+	io::{BufRead, BufReader, Cursor, Read},
+};
 use tar::Archive as TarArchive;
+use zstd::Decoder as ZstdDecoder;
 
 pub struct DebFile {
 	pub debian_binary: String,
 	pub control: ControlFile,
 	pub data: TarArchive<Box<dyn BufRead>>,
+}
+
+impl fmt::Debug for DebFile {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_struct("DebFile")
+			.field("debian_binary", &self.debian_binary)
+			.field("control", &self.control)
+			.finish()
+	}
 }
 
 impl DebFile {
@@ -24,6 +37,7 @@ impl DebFile {
 			if name == "debian-binary" {
 				let mut s = String::new();
 				entry.read_to_string(&mut s).unwrap();
+				s.truncate(s.trim_end().len());
 				debian_binary = Some(s);
 			} else if name.starts_with("control.tar") {
 				control = Some(Self::read_control_file(&name, entry));
@@ -56,6 +70,11 @@ impl DebFile {
 				decoder.read_to_end(&mut decompressed).unwrap();
 				Box::new(Cursor::new(decompressed))
 			}
+			"data.tar.zst" => {
+				let mut decoder = ZstdDecoder::new(entry).unwrap();
+				decoder.read_to_end(&mut decompressed).unwrap();
+				Box::new(Cursor::new(decompressed))
+			}
 			_ => {
 				std::io::copy(&mut entry, &mut decompressed).unwrap();
 				Box::new(Cursor::new(decompressed))
@@ -73,6 +92,7 @@ impl DebFile {
 				xz_decompress(&mut entry, &mut decompressed).unwrap();
 				Box::new(Cursor::new(decompressed))
 			}
+			"control.tar.zst" => Box::new(ZstdDecoder::new(entry).unwrap()) as Box<dyn Read>,
 			_ => Box::new(entry),
 		};
 		let mut archive = TarArchive::new(reader);
