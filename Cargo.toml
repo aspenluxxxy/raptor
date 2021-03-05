@@ -9,11 +9,17 @@ edition = "2018"
 ar = "0.8.0"
 bzip2 = "0.4.2"
 flate2 = "1.0.20"
-lzma-rs = "0.1.3"
+#lzma-rs = "0.1.3"
+rust-lzma = "0.5.1"
 tar = "0.4.33"
 zstd = "0.6.1"
+# Parsing control files
+debcontrol = "0.1.1"
+# Making the API better
+thiserror = "1.0.24"
 
 [profile.release]
 incremental = true
 lto = 'thin'
 opt-level = 3
+panic = 'abort'

@@ -1,8 +1,10 @@
 use super::control::ControlFile;
+use crate::{Error, Result};
 use ar::{Archive as Ar, Entry as ArEntry};
 use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
-use lzma_rs::xz_decompress;
+//use lzma_rs::xz_decompress;
+use lzma::LzmaReader;
 use std::{
 	fmt,
 	io::{BufRead, BufReader, Cursor, Read},
@@ -26,7 +28,7 @@ impl fmt::Debug for DebFile {
 }
 
 impl DebFile {
-	pub fn new(deb: Vec<u8>) -> Self {
+	pub fn parse(deb: Vec<u8>) -> Result<Self> {
 		let deb = Cursor::new(deb);
 		let mut debian_binary = None;
 		let mut control = None;
@@ -36,69 +38,67 @@ impl DebFile {
 			let name = String::from_utf8_lossy(entry.header().identifier()).to_string();
 			if name == "debian-binary" {
 				let mut s = String::new();
-				entry.read_to_string(&mut s).unwrap();
+				entry.read_to_string(&mut s)?;
 				s.truncate(s.trim_end().len());
 				debian_binary = Some(s);
 			} else if name.starts_with("control.tar") {
-				control = Some(Self::read_control_file(&name, entry));
+				control = Some(Self::read_control_file(&name, entry)?);
 			} else if name.starts_with("data.tar") {
-				data = Some(Self::read_data(&name, entry));
+				data = Some(Self::read_data(&name, entry)?);
 			}
 		}
-		Self {
-			debian_binary: debian_binary.unwrap(),
-			control: control.unwrap(),
-			data: data.unwrap(),
-		}
+		Ok(Self {
+			debian_binary: debian_binary
+				.ok_or_else(|| Error::MissingPart("debian-binary".into()))?,
+			control: control.ok_or_else(|| Error::MissingPart("control".into()))?,
+			data: data.ok_or_else(|| Error::MissingPart("data".into()))?,
+		})
 	}
 
-	fn read_data(name: &str, mut entry: ArEntry<Cursor<Vec<u8>>>) -> TarArchive<Box<dyn BufRead>> {
+	fn read_data(
+		name: &str,
+		mut entry: ArEntry<Cursor<Vec<u8>>>,
+	) -> Result<TarArchive<Box<dyn BufRead>>> {
 		let mut decompressed = Vec::<u8>::new();
 		let reader = match name {
 			"data.tar.gz" => {
 				let mut decoder = GzDecoder::new(entry);
-				decoder.read_to_end(&mut decompressed).unwrap();
+				decoder.read_to_end(&mut decompressed)?;
 				Box::new(Cursor::new(decompressed)) as Box<dyn Read>
 			}
 			"data.tar.xz" => {
-				let mut entry = BufReader::new(entry);
-				xz_decompress(&mut entry, &mut decompressed).unwrap();
+				let mut decoder = LzmaReader::new_decompressor(entry)?;
+				decoder.read_to_end(&mut decompressed)?;
 				Box::new(Cursor::new(decompressed))
 			}
 			"data.tar.bz2" => {
 				let mut decoder = BzDecoder::new(entry);
-				decoder.read_to_end(&mut decompressed).unwrap();
+				decoder.read_to_end(&mut decompressed)?;
 				Box::new(Cursor::new(decompressed))
 			}
 			"data.tar.zst" => {
-				let mut decoder = ZstdDecoder::new(entry).unwrap();
-				decoder.read_to_end(&mut decompressed).unwrap();
+				let mut decoder = ZstdDecoder::new(entry)?;
+				decoder.read_to_end(&mut decompressed)?;
 				Box::new(Cursor::new(decompressed))
 			}
 			_ => {
-				std::io::copy(&mut entry, &mut decompressed).unwrap();
+				std::io::copy(&mut entry, &mut decompressed)?;
 				Box::new(Cursor::new(decompressed))
 			}
 		};
-		TarArchive::new(Box::new(BufReader::new(reader)))
+		Ok(TarArchive::new(Box::new(BufReader::new(reader))))
 	}
 
-	fn read_control_file(name: &str, entry: ArEntry<Cursor<Vec<u8>>>) -> ControlFile {
+	fn read_control_file(name: &str, entry: ArEntry<Cursor<Vec<u8>>>) -> Result<ControlFile> {
 		let reader = match name {
 			"control.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read>,
-			"control.tar.xz" => {
-				let mut decompressed = Vec::<u8>::new();
-				let mut entry = BufReader::new(entry);
-				xz_decompress(&mut entry, &mut decompressed).unwrap();
-				Box::new(Cursor::new(decompressed))
-			}
-			"control.tar.zst" => Box::new(ZstdDecoder::new(entry).unwrap()) as Box<dyn Read>,
+			"control.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?) as Box<dyn Read>,
+			"control.tar.zst" => Box::new(ZstdDecoder::new(entry)?) as Box<dyn Read>,
 			_ => Box::new(entry),
 		};
 		let mut archive = TarArchive::new(reader);
 		let control_entry = archive
-			.entries()
-			.unwrap()
+			.entries()?
 			.flatten()
 			.find(|entry| {
 				entry
@@ -106,7 +106,7 @@ impl DebFile {
 					.map(|path| path.ends_with("control"))
 					.unwrap_or(false)
 			})
-			.unwrap();
-		ControlFile::new(BufReader::new(control_entry))
+			.ok_or_else(|| Error::MissingPart("control".into()))?;
+		ControlFile::parse(BufReader::new(control_entry))
 	}
 }

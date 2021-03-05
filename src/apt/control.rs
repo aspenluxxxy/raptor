@@ -1,3 +1,4 @@
+use crate::{Error, Result};
 use std::{
 	collections::BTreeMap,
 	fmt,
@@ -55,26 +56,32 @@ impl ControlEntry {
 pub struct ControlFile(BTreeMap<String, ControlEntry>);
 
 impl ControlFile {
-	pub fn new<T: BufRead>(data: T) -> ControlFile {
-		let mut map: BTreeMap<String, ControlEntry> = BTreeMap::default();
-		for line in data.lines() {
-			let line = match line {
-				Ok(o) => o,
-				Err(_) => continue,
-			};
-			let splitter = line.splitn(2, ':').collect::<Vec<_>>();
-			let (key, value) = (splitter[0].trim(), splitter[1].trim());
-			let entry = match key.to_lowercase().as_str() {
-				"installed-size" => ControlEntry::from_number(value),
-				"essential" | "build-essential" => ControlEntry::from_yesno(value),
-				"tag" | "depends" | "pre-depends" | "recommends" | "suggests" | "enhances"
-				| "build-depends" | "breaks" | "conflicts" | "provides" | "replaces"
-				| "built-using" => ControlEntry::from_commalist(value),
-				_ => ControlEntry::Value(value.into()),
-			};
-			map.insert(key.into(), entry);
+	pub fn parse<T: BufRead>(data: T) -> Result<ControlFile> {
+		Self::parse_multi(data).and_then(|parsed| parsed.first().cloned().ok_or(Error::Empty))
+	}
+
+	pub fn parse_multi<T: BufRead>(mut data: T) -> Result<Vec<ControlFile>> {
+		let mut parsed = Vec::with_capacity(1);
+		let mut buf = String::new();
+		data.read_to_string(&mut buf)?;
+		let paragraphs = debcontrol::parse_str(&buf)?;
+		for paragraph in paragraphs {
+			let mut map: BTreeMap<String, ControlEntry> = BTreeMap::default();
+			for field in &paragraph.fields {
+				let (key, value) = (field.name.trim(), field.value.trim());
+				let entry = match key.to_lowercase().as_str() {
+					"installed-size" => ControlEntry::from_number(value),
+					"essential" | "build-essential" => ControlEntry::from_yesno(value),
+					"tag" | "depends" | "pre-depends" | "recommends" | "suggests" | "enhances"
+					| "build-depends" | "breaks" | "conflicts" | "provides" | "replaces"
+					| "built-using" => ControlEntry::from_commalist(value),
+					_ => ControlEntry::Value(value.into()),
+				};
+				map.insert(key.into(), entry);
+			}
+			parsed.push(Self(map));
 		}
-		Self(map)
+		Ok(parsed)
 	}
 
 	fn sort_keys(&self) -> Vec<(&String, &ControlEntry)> {
