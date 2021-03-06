@@ -1,4 +1,4 @@
-use raptor::apt::archive::DebFile;
+use raptor::apt::DebFile;
 use std::{
 	fs::File,
 	io::{BufReader, Read},
