@@ -3,7 +3,6 @@ use crate::{Error, Result};
 use ar::{Archive as Ar, Entry as ArEntry};
 use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
-//use lzma_rs::xz_decompress;
 use lzma::LzmaReader;
 use std::{
 	fmt,
@@ -12,13 +11,13 @@ use std::{
 use tar::Archive as TarArchive;
 use zstd::Decoder as ZstdDecoder;
 
-pub struct DebFile {
+pub struct DebFile<'a> {
 	pub debian_binary: String,
 	pub control: ControlFile,
-	pub data: TarArchive<Box<dyn BufRead>>,
+	pub data: TarArchive<Box<dyn BufRead + 'a>>,
 }
 
-impl fmt::Debug for DebFile {
+impl<'a> fmt::Debug for DebFile<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("DebFile")
 			.field("debian_binary", &self.debian_binary)
@@ -27,8 +26,8 @@ impl fmt::Debug for DebFile {
 	}
 }
 
-impl DebFile {
-	pub fn parse(deb: Vec<u8>) -> Result<Self> {
+impl<'a> DebFile<'a> {
+	pub fn parse(deb: &'a [u8]) -> Result<DebFile<'a>> {
 		let deb = Cursor::new(deb);
 		let mut debian_binary = None;
 		let mut control = None;
@@ -42,9 +41,9 @@ impl DebFile {
 				s.truncate(s.trim_end().len());
 				debian_binary = Some(s);
 			} else if name.starts_with("control.tar") {
-				control = Some(Self::read_control_file(&name, entry)?);
+				control = Some(Self::read_control_file(&name, &mut entry)?);
 			} else if name.starts_with("data.tar") {
-				data = Some(Self::read_data(&name, entry)?);
+				data = Some(Self::read_data(&name, &mut entry)?);
 			}
 		}
 		Ok(Self {
@@ -57,39 +56,21 @@ impl DebFile {
 
 	fn read_data(
 		name: &str,
-		mut entry: ArEntry<Cursor<Vec<u8>>>,
-	) -> Result<TarArchive<Box<dyn BufRead>>> {
-		let mut decompressed = Vec::<u8>::new();
+		entry: &'a mut ArEntry<'a, Cursor<&'a [u8]>>,
+	) -> Result<TarArchive<Box<dyn BufRead + 'a>>> {
 		let reader = match name {
-			"data.tar.gz" => {
-				let mut decoder = GzDecoder::new(entry);
-				decoder.read_to_end(&mut decompressed)?;
-				Box::new(Cursor::new(decompressed)) as Box<dyn Read>
-			}
-			"data.tar.xz" => {
-				let mut decoder = LzmaReader::new_decompressor(entry)?;
-				decoder.read_to_end(&mut decompressed)?;
-				Box::new(Cursor::new(decompressed))
-			}
-			"data.tar.bz2" => {
-				let mut decoder = BzDecoder::new(entry);
-				decoder.read_to_end(&mut decompressed)?;
-				Box::new(Cursor::new(decompressed))
-			}
-			"data.tar.zst" => {
-				let mut decoder = ZstdDecoder::new(entry)?;
-				decoder.read_to_end(&mut decompressed)?;
-				Box::new(Cursor::new(decompressed))
-			}
+			"data.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read + 'a>,
+			"data.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?),
+			"data.tar.bz2" => Box::new(BzDecoder::new(entry)),
+			"data.tar.zst" => Box::new(ZstdDecoder::new(entry)?),
 			_ => {
-				std::io::copy(&mut entry, &mut decompressed)?;
-				Box::new(Cursor::new(decompressed))
+				todo!()
 			}
 		};
 		Ok(TarArchive::new(Box::new(BufReader::new(reader))))
 	}
 
-	fn read_control_file(name: &str, entry: ArEntry<Cursor<Vec<u8>>>) -> Result<ControlFile> {
+	fn read_control_file(name: &str, entry: &mut ArEntry<Cursor<&[u8]>>) -> Result<ControlFile> {
 		let reader = match name {
 			"control.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read>,
 			"control.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?) as Box<dyn Read>,
