@@ -11,13 +11,13 @@ use std::{
 use tar::Archive as TarArchive;
 use zstd::Decoder as ZstdDecoder;
 
-pub struct DebFile<'a> {
+pub struct DebFile {
 	pub debian_binary: String,
 	pub control: ControlFile,
-	pub data: TarArchive<Box<dyn BufRead + 'a>>,
+	pub data: TarArchive<Box<dyn BufRead>>,
 }
 
-impl<'a> fmt::Debug for DebFile<'a> {
+impl fmt::Debug for DebFile {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("DebFile")
 			.field("debian_binary", &self.debian_binary)
@@ -26,8 +26,8 @@ impl<'a> fmt::Debug for DebFile<'a> {
 	}
 }
 
-impl<'a> DebFile<'a> {
-	pub fn parse(deb: &'a [u8]) -> Result<DebFile<'a>> {
+impl DebFile {
+	pub fn parse(deb: &[u8]) -> Result<DebFile> {
 		let deb = Cursor::new(deb);
 		let mut debian_binary = None;
 		let mut control = None;
@@ -43,7 +43,9 @@ impl<'a> DebFile<'a> {
 			} else if name.starts_with("control.tar") {
 				control = Some(Self::read_control_file(&name, &mut entry)?);
 			} else if name.starts_with("data.tar") {
-				data = Some(Self::read_data(&name, &mut entry)?);
+				let mut contents = Vec::<u8>::with_capacity(entry.header().size() as usize);
+				entry.read_to_end(&mut contents)?;
+				data = Some(Self::read_data(&name, contents)?);
 			}
 		}
 		Ok(Self {
@@ -54,12 +56,10 @@ impl<'a> DebFile<'a> {
 		})
 	}
 
-	fn read_data(
-		name: &str,
-		entry: &'a mut ArEntry<'a, Cursor<&'a [u8]>>,
-	) -> Result<TarArchive<Box<dyn BufRead + 'a>>> {
+	fn read_data(name: &str, entry: Vec<u8>) -> Result<TarArchive<Box<dyn BufRead>>> {
+		let entry = Cursor::new(entry);
 		let reader = match name {
-			"data.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read + 'a>,
+			"data.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read>,
 			"data.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?),
 			"data.tar.bz2" => Box::new(BzDecoder::new(entry)),
 			"data.tar.zst" => Box::new(ZstdDecoder::new(entry)?),

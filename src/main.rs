@@ -35,7 +35,7 @@ fn main() {
 			fd.read_to_end(&mut v)
 				.unwrap_or_else(|err| panic!("failed to read '{}': {:?}", file.display(), err));
 		}
-		DebFile::parse(v)
+		DebFile::parse(&v)
 			.unwrap_or_else(|err| panic!("failed to parse '{}': {:?}", file.display(), err));
 	}
 	let time = start.elapsed();
