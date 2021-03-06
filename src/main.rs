@@ -1,4 +1,4 @@
-use raptor::apt::DebFile;
+use raptor::DebFile;
 use std::{
 	fs::File,
 	io::{BufReader, Read},
@@ -21,20 +21,11 @@ fn main() {
 
 	let start = Instant::now();
 	let amt_files = files.len();
-	let update_at = amt_files / 10;
-	for (idx, file) in files.iter().enumerate() {
+	for file in files {
 		let mut v = Vec::new();
-		if idx % update_at == 0 {
-			println!(
-				"{}% done",
-				((idx as f32 / amt_files as f32) * 100.0).round() as u8
-			);
-		}
-		{
-			let mut fd = BufReader::new(File::open(file).unwrap());
-			fd.read_to_end(&mut v)
-				.unwrap_or_else(|err| panic!("failed to read '{}': {:?}", file.display(), err));
-		}
+		let mut fd = BufReader::new(File::open(&file).unwrap());
+		fd.read_to_end(&mut v)
+			.unwrap_or_else(|err| panic!("failed to read '{}': {:?}", file.display(), err));
 		DebFile::parse(&v)
 			.unwrap_or_else(|err| panic!("failed to parse '{}': {:?}", file.display(), err));
 	}
@@ -42,6 +33,6 @@ fn main() {
 	println!(
 		"took {} seconds to parse {} deb files",
 		time.as_secs(),
-		files.len()
+		amt_files
 	);
 }

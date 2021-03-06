@@ -9,7 +9,10 @@
 #[macro_use]
 extern crate thiserror;
 
-pub mod apt;
+pub mod archive;
+pub mod control;
 pub mod error;
 
+pub use archive::DebFile;
+pub use control::{ControlEntry, ControlFile};
 pub use error::{Error, Result};
