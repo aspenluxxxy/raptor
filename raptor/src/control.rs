@@ -117,7 +117,7 @@ impl ControlFile {
 impl fmt::Display for ControlFile {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		for &(key, value) in &self.sort_keys() {
-			writeln!(f, "{}: {}", key, value)?;
+			writeln!(f, "{}: {}", key, value.to_string().replace('\n', "\n "))?;
 		}
 		Ok(())
 	}

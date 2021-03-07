@@ -6,41 +6,44 @@
 
 mod args;
 
-use raptor::DebFile;
+use crate::args::CmdArgs;
+use raptor::{ControlEntry, DebFile};
+use rayon::iter::{ParallelBridge, ParallelIterator};
+use sha2::{Digest, Sha256};
 use std::{
 	fs::File,
-	io::{BufReader, Read},
-	time::Instant,
+	io::{BufReader, Read, Write},
 };
+use structopt::StructOpt;
 
 fn main() {
-	//let args = std::env::args().collect::<Vec<String>>();
-	//let path = args[1].as_str();
-
-	let mut files = Vec::with_capacity(4096);
-
-	for file in std::fs::read_dir("procursus-tests").unwrap() {
-		let file = file.unwrap();
-		if !file.file_name().to_string_lossy().ends_with(".deb") {
-			continue;
+	let args = CmdArgs::from_args();
+	match args {
+		CmdArgs::Scan { folder, .. } => {
+			let dir = std::fs::read_dir(&folder).expect("failed to scan directory");
+			let controls = dir
+				.par_bridge()
+				.map(|entry| {
+					let entry = entry.expect("failed to get directory entry");
+					let mut contents = Vec::<u8>::with_capacity(32768);
+					let mut file =
+						BufReader::new(File::open(entry.path()).expect("failed to open file"));
+					file.read_to_end(&mut contents)
+						.expect("failed to read file");
+					let deb = DebFile::parse(&contents).expect("failed to parse deb file");
+					let mut control = deb.control;
+					let mut sha = Sha256::default();
+					sha.update(&contents);
+					control.insert(
+						"SHA256".to_string(),
+						ControlEntry::Value(hex::encode(sha.finalize().to_vec())),
+					);
+					control.to_string()
+				})
+				.collect::<Vec<_>>();
+			let stdout = std::io::stdout();
+			writeln!(stdout.lock(), "{}", controls.join("\n")).expect("failed to write to stdout");
 		}
-		files.push(file.path());
+		_ => unimplemented!(),
 	}
-
-	let start = Instant::now();
-	let amt_files = files.len();
-	for file in files {
-		let mut v = Vec::new();
-		let mut fd = BufReader::new(File::open(&file).unwrap());
-		fd.read_to_end(&mut v)
-			.unwrap_or_else(|err| panic!("failed to read '{}': {:?}", file.display(), err));
-		DebFile::parse(&v)
-			.unwrap_or_else(|err| panic!("failed to parse '{}': {:?}", file.display(), err));
-	}
-	let time = start.elapsed();
-	println!(
-		"took {:.4} seconds to parse {} deb files",
-		time.as_millis() as f64 / 1000.0,
-		amt_files
-	);
 }

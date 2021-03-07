@@ -30,4 +30,16 @@ pub enum CmdArgs {
 		#[structopt(parse(from_os_str))]
 		output: PathBuf,
 	},
+	Unpack {
+		#[structopt(parse(from_os_str))]
+		input: PathBuf,
+		#[structopt(parse(from_os_str))]
+		output: PathBuf,
+	},
+	Scan {
+		#[structopt(parse(from_os_str))]
+		folder: PathBuf,
+		#[structopt(parse(from_os_str))]
+		target: Option<PathBuf>,
+	},
 }

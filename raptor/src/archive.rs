@@ -21,7 +21,7 @@ use zstd::Decoder as ZstdDecoder;
 pub struct DebFile {
 	pub debian_binary: String,
 	pub control: ControlFile,
-	pub data: TarArchive<Box<dyn BufRead>>,
+	pub data: TarArchive<Box<dyn BufRead + Send>>,
 }
 
 impl fmt::Debug for DebFile {
@@ -90,10 +90,10 @@ impl DebFile {
 		Ok(self.data.unpack(destination)?)
 	}
 
-	fn read_data(name: &str, entry: Vec<u8>) -> Result<TarArchive<Box<dyn BufRead>>> {
+	fn read_data(name: &str, entry: Vec<u8>) -> Result<TarArchive<Box<dyn BufRead + Send>>> {
 		let entry = Cursor::new(entry);
 		let reader = match name {
-			"data.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read>,
+			"data.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read + Send>,
 			"data.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?),
 			"data.tar.bz2" => Box::new(BzDecoder::new(entry)),
 			"data.tar.zst" => Box::new(ZstdDecoder::new(entry)?),
