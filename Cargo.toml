@@ -3,6 +3,7 @@ name = "raptor"
 version = "0.1.0"
 authors = ["aspen <aspenuwu@protonmail.com>"]
 edition = "2018"
+license = "MPL-2.0"
 
 [dependencies]
 # Stuff relating to unpacking DEB files
