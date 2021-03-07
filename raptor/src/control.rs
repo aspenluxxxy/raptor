@@ -17,7 +17,7 @@ use std::{
 pub enum ControlEntry {
 	Value(String),
 	MultiValue(Vec<String>),
-	Number(usize),
+	Number(u64),
 	Bool(bool),
 }
 
@@ -54,7 +54,7 @@ impl ControlEntry {
 	}
 
 	pub fn from_number(d: &str) -> ControlEntry {
-		ControlEntry::Number(d.parse::<usize>().unwrap_or(0))
+		ControlEntry::Number(d.parse::<u64>().unwrap_or(0))
 	}
 }
 

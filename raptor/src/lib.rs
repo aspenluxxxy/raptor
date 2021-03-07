@@ -16,6 +16,8 @@
 extern crate thiserror;
 
 pub mod archive;
+#[allow(unsafe_code, clippy::all)]
+pub mod bridge;
 pub mod control;
 pub mod error;
 
