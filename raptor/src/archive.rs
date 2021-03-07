@@ -13,6 +13,7 @@ use lzma::LzmaReader;
 use std::{
 	fmt,
 	io::{BufRead, BufReader, Cursor, Read},
+	path::Path,
 };
 use tar::Archive as TarArchive;
 use zstd::Decoder as ZstdDecoder;
@@ -60,6 +61,33 @@ impl DebFile {
 			control: control.ok_or_else(|| Error::MissingPart("control".into()))?,
 			data: data.ok_or_else(|| Error::MissingPart("data".into()))?,
 		})
+	}
+
+	pub fn debian_binary(&self) -> &str {
+		&self.debian_binary
+	}
+
+	pub fn control(&self) -> &ControlFile {
+		&self.control
+	}
+
+	pub fn list_files(&mut self) -> Result<Vec<String>> {
+		Ok(self
+			.data
+			.entries()?
+			.filter_map(|entry| {
+				let entry = entry.ok()?;
+				let path = entry.path().ok()?;
+				path.to_str().map(|s| s.to_string())
+			})
+			.collect())
+	}
+
+	pub fn unpack<P>(&mut self, destination: P) -> Result<()>
+	where
+		P: AsRef<Path>,
+	{
+		Ok(self.data.unpack(destination)?)
 	}
 
 	fn read_data(name: &str, entry: Vec<u8>) -> Result<TarArchive<Box<dyn BufRead>>> {

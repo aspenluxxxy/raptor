@@ -5,6 +5,10 @@ mod ffi {
 	extern "Rust" {
 		type DebFile;
 		fn parse_deb(deb: &[u8]) -> Result<Box<DebFile>>;
+		fn debian_binary(&self) -> &str;
+		fn control(&self) -> &ControlFile;
+		fn unpack(&mut self, destination: &str) -> Result<()>;
+		fn list_files(&mut self) -> Result<Vec<String>>;
 	}
 	extern "Rust" {
 		type ControlEntry;
@@ -12,6 +16,9 @@ mod ffi {
 		fn entry_multivalue(value: Vec<String>) -> Box<ControlEntry>;
 		fn entry_number(value: u64) -> Box<ControlEntry>;
 		fn entry_bool(value: bool) -> Box<ControlEntry>;
+		fn entry_from_yesno(value: &str) -> Box<ControlEntry>;
+		fn entry_from_commalist(value: &str) -> Box<ControlEntry>;
+		fn entry_from_number(value: &str) -> Box<ControlEntry>;
 		fn to_string(&self) -> String;
 	}
 	extern "Rust" {
@@ -48,4 +55,16 @@ fn entry_number(value: u64) -> Box<ControlEntry> {
 
 fn entry_bool(value: bool) -> Box<ControlEntry> {
 	Box::new(ControlEntry::Bool(value))
+}
+
+fn entry_from_yesno(value: &str) -> Box<ControlEntry> {
+	Box::new(ControlEntry::from_yesno(value))
+}
+
+fn entry_from_commalist(value: &str) -> Box<ControlEntry> {
+	Box::new(ControlEntry::from_commalist(value))
+}
+
+fn entry_from_number(value: &str) -> Box<ControlEntry> {
+	Box::new(ControlEntry::from_number(value))
 }
