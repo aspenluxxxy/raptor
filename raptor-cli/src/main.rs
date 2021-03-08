@@ -30,10 +30,10 @@ fn main() {
 						BufReader::new(File::open(entry.path()).expect("failed to open file"));
 					file.read_to_end(&mut contents)
 						.expect("failed to read file");
-					let deb = DebFile::parse(&contents).expect("failed to parse deb file");
-					let mut control = deb.control;
 					let mut sha = Sha256::default();
 					sha.update(&contents);
+					let mut deb = DebFile::parse(contents).expect("failed to parse deb file");
+					let mut control = deb.control().unwrap();
 					control.insert(
 						"SHA256".to_string(),
 						ControlEntry::Value(hex::encode(sha.finalize().to_vec())),

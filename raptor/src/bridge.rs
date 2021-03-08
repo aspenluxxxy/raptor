@@ -4,9 +4,10 @@ use crate::{ControlEntry, ControlFile, DebFile, Result};
 mod ffi {
 	extern "Rust" {
 		type DebFile;
-		fn parse_deb(deb: &[u8]) -> Result<Box<DebFile>>;
+		fn parse_deb(deb: Vec<u8>) -> Result<Box<DebFile>>;
 		fn debian_binary(&self) -> &str;
-		fn control(&self) -> &ControlFile;
+		#[rust_name = "boxed_control"]
+		fn control(self: &mut DebFile) -> Result<Box<ControlFile>>;
 		fn unpack(&mut self, destination: &str) -> Result<()>;
 		fn list_files(&mut self) -> Result<Vec<String>>;
 	}
@@ -29,7 +30,7 @@ mod ffi {
 	}
 }
 
-fn parse_deb(deb: &[u8]) -> Result<Box<DebFile>> {
+fn parse_deb(deb: Vec<u8>) -> Result<Box<DebFile>> {
 	DebFile::parse(deb).map(Box::new)
 }
 

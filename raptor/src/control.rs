@@ -8,7 +8,7 @@ use crate::{Error, Result};
 use std::{
 	collections::BTreeMap,
 	fmt,
-	io::BufRead,
+	io::Read,
 	iter::FromIterator,
 	ops::{Deref, DerefMut},
 };
@@ -62,11 +62,11 @@ impl ControlEntry {
 pub struct ControlFile(BTreeMap<String, ControlEntry>);
 
 impl ControlFile {
-	pub fn parse<T: BufRead>(data: T) -> Result<ControlFile> {
+	pub fn parse<T: Read>(data: T) -> Result<ControlFile> {
 		Self::parse_multi(data).and_then(|parsed| parsed.first().cloned().ok_or(Error::Empty))
 	}
 
-	pub fn parse_multi<T: BufRead>(mut data: T) -> Result<Vec<ControlFile>> {
+	pub fn parse_multi<T: Read>(mut data: T) -> Result<Vec<ControlFile>> {
 		let mut parsed = Vec::with_capacity(1);
 		let mut buf = String::new();
 		data.read_to_string(&mut buf)?;
