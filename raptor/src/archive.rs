@@ -119,24 +119,28 @@ impl DebFile {
 	{
 		let control = {
 			let control = control.as_ref();
-			let tar = Cursor::new(Vec::<u8>::with_capacity(4096));
-			let mut builder = TarBuilder::new(tar);
-			builder.append_dir_all("", control)?;
-			builder.finish()?;
-			let reader = Box::new(BufReader::new(builder.into_inner()?)) as Box<dyn BufRead + Send>;
+			let tar = {
+				let tar = Vec::<u8>::with_capacity(4096);
+				let mut builder = TarBuilder::new(tar);
+				builder.append_dir_all("", control)?;
+				Cursor::new(builder.into_inner()?)
+			};
+			let reader = Box::new(BufReader::new(tar)) as Box<dyn BufRead + Send>;
 			TarArchive::new(reader)
 		};
 		let data = {
 			let data = data.as_ref();
-			let tar = Cursor::new(Vec::<u8>::with_capacity(4096));
-			let mut builder = TarBuilder::new(tar);
-			builder.append_dir_all("", data)?;
-			builder.finish()?;
-			let reader = Box::new(BufReader::new(builder.into_inner()?)) as Box<dyn BufRead + Send>;
+			let tar = {
+				let tar = Vec::<u8>::with_capacity(4096);
+				let mut builder = TarBuilder::new(tar);
+				builder.append_dir_all("", data)?;
+				Cursor::new(builder.into_inner()?)
+			};
+			let reader = Box::new(BufReader::new(tar)) as Box<dyn BufRead + Send>;
 			TarArchive::new(reader)
 		};
 		Ok(Self {
-			debian_binary: "2.0".into(),
+			debian_binary: "2.0\n".into(),
 			control,
 			data,
 		})
@@ -153,7 +157,7 @@ impl DebFile {
 		let mut builder = ArBuilder::new(destination);
 		// Create debian-binary
 		let header = ArHeader::new(debian_binary_name, 4);
-		builder.append(&header, b"2.0\n" as &[u8])?;
+		builder.append(&header, self.debian_binary.as_bytes())?;
 		// Create control.tar
 		let mut control_bytes = Vec::<u8>::new();
 		control.read_to_end(&mut control_bytes)?;
