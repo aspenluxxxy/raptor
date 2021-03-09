@@ -21,8 +21,8 @@ use structopt::StructOpt;
 fn main() {
 	let args = CmdArgs::from_args();
 	match args {
-		CmdArgs::Scan { folder, .. } => {
-			let dir = std::fs::read_dir(&folder).expect("failed to scan directory");
+		CmdArgs::Scan { input, .. } => {
+			let dir = std::fs::read_dir(&input).expect("failed to scan directory");
 			let controls = dir
 				.par_bridge()
 				.map(|entry| {
