@@ -1,15 +1,25 @@
-use crate::{ControlEntry, ControlFile, DebFile, Result};
+use crate::{Compression, ControlEntry, ControlFile, DebFile, Result};
 
 #[cxx::bridge(namespace = "raptor")]
 mod ffi {
+	enum Compression {
+		Bz2,
+		Gz,
+		Xz,
+		Zst,
+	}
 	extern "Rust" {
 		type DebFile;
 		fn parse_deb(deb: Vec<u8>) -> Result<Box<DebFile>>;
 		fn debian_binary(&self) -> &str;
-		#[rust_name = "boxed_control"]
-		fn control(self: &mut DebFile) -> Result<Box<ControlFile>>;
 		fn unpack(&mut self, destination: &str) -> Result<()>;
 		fn list_files(&mut self) -> Result<Vec<String>>;
+		#[rust_name = "boxed_control"]
+		fn control(self: &mut DebFile) -> Result<Box<ControlFile>>;
+		#[rust_name = "deb_boxed_pack"]
+		fn pack(control: &str, data: &str) -> Result<Box<DebFile>>;
+		#[rust_name = "deb_write_to_file"]
+		fn write(deb: Box<DebFile>, destination: &str, compression: Compression) -> Result<()>;
 	}
 	extern "Rust" {
 		type ControlEntry;
@@ -32,6 +42,25 @@ mod ffi {
 
 fn parse_deb(deb: Vec<u8>) -> Result<Box<DebFile>> {
 	DebFile::parse(deb).map(Box::new)
+}
+
+fn deb_write_to_file(
+	deb: Box<DebFile>,
+	destination: &str,
+	compression: ffi::Compression,
+) -> Result<()> {
+	let compression = match compression {
+		ffi::Compression::Bz2 => Compression::Bz2,
+		ffi::Compression::Gz => Compression::Gz,
+		ffi::Compression::Xz => Compression::Xz,
+		ffi::Compression::Zst => Compression::Zst,
+		_ => Compression::Xz,
+	};
+	deb.write(std::fs::File::create(destination)?, compression)
+}
+
+fn deb_boxed_pack(control: &str, data: &str) -> Result<Box<DebFile>> {
+	Ok(Box::new(DebFile::pack(control, data)?))
 }
 
 fn parse_controlfile(data: &[u8]) -> Result<Box<ControlFile>> {
