@@ -18,6 +18,8 @@ pub enum Error {
 	MissingPart(String),
 	#[error("deb file was empty")]
 	Empty,
+	#[error("compression algorithm could not be detected in '{0}'")]
+	InvalidCompression(String),
 }
 
 impl<'a> From<debcontrol::SyntaxError<'a>> for Error {

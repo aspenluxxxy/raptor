@@ -10,9 +10,11 @@ use crate::args::CmdArgs;
 use raptor::{ControlEntry, DebFile};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use sha2::{Digest, Sha256};
+use std::io::BufWriter;
 use std::{
 	fs::File,
 	io::{BufReader, Read, Write},
+	time::Instant,
 };
 use structopt::StructOpt;
 
@@ -43,6 +45,20 @@ fn main() {
 				.collect::<Vec<_>>();
 			let stdout = std::io::stdout();
 			writeln!(stdout.lock(), "{}", controls.join("\n")).expect("failed to write to stdout");
+		}
+		CmdArgs::Pack {
+			compression,
+			control,
+			input,
+			output,
+		} => {
+			let start = Instant::now();
+			DebFile::pack(control, input)
+				.expect("failed to pack archive")
+				.write(BufWriter::new(File::create(output).unwrap()), compression)
+				.expect("failed to write archive");
+			let end = start.elapsed();
+			println!("took {} ms to pack", end.as_millis());
 		}
 		_ => unimplemented!(),
 	}

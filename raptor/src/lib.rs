@@ -23,5 +23,6 @@ pub mod control;
 pub mod error;
 
 pub use archive::DebFile;
+pub use compression::Compression;
 pub use control::{ControlEntry, ControlFile};
 pub use error::{Error, Result};

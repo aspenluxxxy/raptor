@@ -1,30 +1,14 @@
-use std::{path::PathBuf, str::FromStr};
+use raptor::compression::Compression;
+use std::path::PathBuf;
 use structopt::StructOpt;
-
-pub enum Compression {
-	Lzma,
-	Gzip,
-	Zstd,
-}
-
-impl FromStr for Compression {
-	type Err = String;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s.to_lowercase().trim() {
-			"lzma" | "xz" => Ok(Compression::Lzma),
-			"gz" | "gzip" => Ok(Compression::Gzip),
-			"zstd" => Ok(Compression::Zstd),
-			_ => Err("invalid compression type: expected lzma/xz, gz/gzip, or zstd.".into()),
-		}
-	}
-}
 
 #[derive(StructOpt)]
 pub enum CmdArgs {
 	Pack {
-		#[structopt(short = "c", long = "compress", default_value = "Compression::Lzma")]
+		#[structopt(short = "c", long = "compress", default_value = "xz")]
 		compression: Compression,
+		#[structopt(short, long, parse(from_os_str))]
+		control: PathBuf,
 		#[structopt(parse(from_os_str))]
 		input: PathBuf,
 		#[structopt(parse(from_os_str))]

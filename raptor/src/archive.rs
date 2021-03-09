@@ -4,22 +4,19 @@
 	file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
-use crate::{ControlFile, Error, Result};
-use ar::Archive as Ar;
-use bzip2::read::BzDecoder;
-use flate2::read::GzDecoder;
-use lzma::LzmaReader;
+use crate::{compression::Compression, ControlFile, Error, Result};
+use ar::{Archive as Ar, Builder as ArBuilder, Header as ArHeader};
 use std::{
-	io::{BufRead, BufReader, Cursor, Read},
+	io::{BufRead, BufReader, Cursor, Read, Write},
 	path::Path,
+	str::FromStr,
 };
 use tar::{Archive as TarArchive, Builder as TarBuilder};
-use zstd::Decoder as ZstdDecoder;
 
 pub struct DebFile {
 	pub debian_binary: String,
-	pub control: TarArchive<Box<dyn Read + Send>>,
-	pub data: TarArchive<Box<dyn Read + Send>>,
+	pub control: TarArchive<Box<dyn BufRead + Send>>,
+	pub data: TarArchive<Box<dyn BufRead + Send>>,
 }
 
 impl DebFile {
@@ -93,28 +90,26 @@ impl DebFile {
 		Ok(self.data.unpack(destination)?)
 	}
 
-	fn read_data(name: &str, entry: Cursor<Vec<u8>>) -> Result<TarArchive<Box<dyn Read + Send>>> {
-		let reader = match name {
-			"data.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read + Send>,
-			"data.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?),
-			"data.tar.bz2" => Box::new(BzDecoder::new(entry)),
-			"data.tar.zst" => Box::new(ZstdDecoder::new(entry)?),
-			_ => Box::new(entry),
-		};
-		Ok(TarArchive::new(Box::new(reader)))
+	fn read_data(
+		name: &str,
+		entry: Cursor<Vec<u8>>,
+	) -> Result<TarArchive<Box<dyn BufRead + Send>>> {
+		let entry = Box::new(BufReader::new(entry));
+		let decompressor = Box::new(BufReader::new(
+			Compression::from_str(name)?.decompress(entry)?,
+		));
+		Ok(TarArchive::new(decompressor))
 	}
 
 	fn read_control_file(
 		name: &str,
 		entry: Cursor<Vec<u8>>,
-	) -> Result<TarArchive<Box<dyn Read + Send>>> {
-		let reader = match name {
-			"control.tar.gz" => Box::new(GzDecoder::new(entry)) as Box<dyn Read + Send>,
-			"control.tar.xz" => Box::new(LzmaReader::new_decompressor(entry)?),
-			"control.tar.zst" => Box::new(ZstdDecoder::new(entry)?),
-			_ => Box::new(entry),
-		};
-		Ok(TarArchive::new(reader))
+	) -> Result<TarArchive<Box<dyn BufRead + Send>>> {
+		let entry = Box::new(BufReader::new(entry));
+		let decompressor = Box::new(BufReader::new(
+			Compression::from_str(name)?.decompress(entry)?,
+		));
+		Ok(TarArchive::new(decompressor))
 	}
 
 	pub fn pack<A, B>(control: A, data: B) -> Result<Self>
@@ -126,22 +121,51 @@ impl DebFile {
 			let control = control.as_ref();
 			let tar = Cursor::new(Vec::<u8>::with_capacity(4096));
 			let mut builder = TarBuilder::new(tar);
-			builder.append_dir_all("/", control)?;
+			builder.append_dir_all("", control)?;
 			builder.finish()?;
-			TarArchive::new(
-				Box::new(BufReader::new(builder.into_inner()?)) as Box<dyn BufRead + Send>
-			)
+			let reader = Box::new(BufReader::new(builder.into_inner()?)) as Box<dyn BufRead + Send>;
+			TarArchive::new(reader)
 		};
 		let data = {
 			let data = data.as_ref();
 			let tar = Cursor::new(Vec::<u8>::with_capacity(4096));
 			let mut builder = TarBuilder::new(tar);
-			builder.append_dir_all("/", data)?;
+			builder.append_dir_all("", data)?;
 			builder.finish()?;
-			TarArchive::new(
-				Box::new(BufReader::new(builder.into_inner()?)) as Box<dyn BufRead + Send>
-			)
+			let reader = Box::new(BufReader::new(builder.into_inner()?)) as Box<dyn BufRead + Send>;
+			TarArchive::new(reader)
 		};
-		todo!()
+		Ok(Self {
+			debian_binary: "2.0".into(),
+			control,
+			data,
+		})
+	}
+
+	pub fn write<W: Write>(self, destination: W, compression: Compression) -> Result<()> {
+		let debian_binary_name = b"debian-binary".to_vec();
+		let control_name = format!("control.tar.{}", compression).as_bytes().to_vec();
+		let data_name = format!("data.tar.{}", compression).as_bytes().to_vec();
+		// Set up compression
+		let mut control = compression.compress(self.control.into_inner())?;
+		let mut data = compression.compress(self.data.into_inner())?;
+		// Alright, time to start building our archive
+		let mut builder = ArBuilder::new(destination);
+		// Create debian-binary
+		let header = ArHeader::new(debian_binary_name, 4);
+		builder.append(&header, b"2.0\n" as &[u8])?;
+		// Create control.tar
+		let mut control_bytes = Vec::<u8>::new();
+		control.read_to_end(&mut control_bytes)?;
+		let header = ArHeader::new(control_name, control_bytes.len() as u64);
+		builder.append(&header, &control_bytes as &[u8])?;
+		// Create data.tar
+		let mut data_bytes = Vec::<u8>::new();
+		data.read_to_end(&mut data_bytes)?;
+		let header = ArHeader::new(data_name, data_bytes.len() as u64);
+		builder.append(&header, &data_bytes as &[u8])?;
+		// Alright, we're done, ensure everything's flushed.
+		builder.into_inner()?.flush()?;
+		Ok(())
 	}
 }
