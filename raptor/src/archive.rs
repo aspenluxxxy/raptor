@@ -120,7 +120,7 @@ impl DebFile {
 		let control = {
 			let control = control.as_ref();
 			let tar = {
-				let tar = Vec::<u8>::with_capacity(4096);
+				let tar = Vec::<u8>::new();
 				let mut builder = TarBuilder::new(tar);
 				builder.append_dir_all("", control)?;
 				Cursor::new(builder.into_inner()?)
@@ -131,7 +131,7 @@ impl DebFile {
 		let data = {
 			let data = data.as_ref();
 			let tar = {
-				let tar = Vec::<u8>::with_capacity(4096);
+				let tar = Vec::<u8>::new();
 				let mut builder = TarBuilder::new(tar);
 				builder.append_dir_all("", data)?;
 				Cursor::new(builder.into_inner()?)

@@ -67,7 +67,7 @@ impl ControlFile {
 	}
 
 	pub fn parse_multi<T: Read>(mut data: T) -> Result<Vec<ControlFile>> {
-		let mut parsed = Vec::with_capacity(1);
+		let mut parsed = Vec::new();
 		let mut buf = String::new();
 		data.read_to_string(&mut buf)?;
 		let paragraphs = debcontrol::parse_str(&buf)?;

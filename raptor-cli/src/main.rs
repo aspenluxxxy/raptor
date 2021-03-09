@@ -27,7 +27,7 @@ fn main() {
 				.par_bridge()
 				.map(|entry| {
 					let entry = entry.expect("failed to get directory entry");
-					let mut contents = Vec::<u8>::with_capacity(32768);
+					let mut contents = Vec::<u8>::new();
 					let mut file =
 						BufReader::new(File::open(entry.path()).expect("failed to open file"));
 					file.read_to_end(&mut contents)
